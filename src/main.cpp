@@ -266,9 +266,15 @@ void DrDash(){
 }
 
 int main(){
-    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(SW,SH,"Prioritizer ATC - Bubble Sort vs Selection Sort");
+    SetWindowMinSize(640, 360);
     SetTargetFPS(60);Gerar();
+
+    // RenderTexture para manter layout fixo e escalar proporcionalmente
+    RenderTexture2D canvas = LoadRenderTexture(SW, SH);
+    SetTextureFilter(canvas.texture, TEXTURE_FILTER_BILINEAR);
+
     while(!WindowShouldClose()){
         float dt=GetFrameTime();if(!pausado)tDec+=dt;
         if(IsKeyPressed(KEY_R))Gerar();
@@ -282,9 +288,26 @@ int main(){
             if(modo==M_SEL)StepSel();
             UpdAv(dt);UpdBoom(dt);
         }
-        BeginDrawing();ClearBackground({5,5,8,255});
-        DrRadar();DrAv();DrBoom();DrDash();
+
+        // Renderiza cena no canvas fixo (1280x720)
+        BeginTextureMode(canvas);
+            ClearBackground({5,5,8,255});
+            DrRadar();DrAv();DrBoom();DrDash();
+        EndTextureMode();
+
+        // Escala canvas para preencher a janela mantendo proporção 16:9
+        int ww=GetScreenWidth(), wh=GetScreenHeight();
+        float scale=fminf((float)ww/SW,(float)wh/SH);
+        float dw=SW*scale, dh=SH*scale;
+        float ox=(ww-dw)/2.0f, oy=(wh-dh)/2.0f;
+        Rectangle src={0,0,(float)SW,-(float)SH};
+        Rectangle dst={ox,oy,dw,dh};
+
+        BeginDrawing();
+            ClearBackground(BLACK);
+            DrawTexturePro(canvas.texture,src,dst,{0,0},0,WHITE);
         EndDrawing();
     }
+    UnloadRenderTexture(canvas);
     CloseWindow();return 0;
 }
