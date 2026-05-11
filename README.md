@@ -1,9 +1,16 @@
 # Prioritizer ATC — Simulador de Triagem de Pouso
 
-**Autores:** patrickacs, Vinicius Castelo  
+**Autores:** Patrick Anderson Carvalho dos Santos, Vinicius Castelo Ferreira  
 **Projeto:** EDA 2 — Estruturas de Dados e Algoritmos
 
-Simulador de Radar de Controle de Tráfego Aéreo (ATC) focado na demonstração visual de algoritmos de ordenação: **Bubble Sort** vs **Selection Sort**.
+Simulador de Radar de Controle de Tráfego Aéreo (ATC) focado na demonstração visual de algoritmos de ordenação.
+
+## 👥 Alunos
+
+| Nome | Matrícula |
+|------|-----------|
+| Patrick Anderson Carvalho dos Santos | 211030620 |
+| Vinicius Castelo Ferreira | 200062883 |
 
 ## Conceito
 
@@ -11,6 +18,8 @@ Aviões se aproximam da pista de pouso (centro do radar). O sistema precisa orde
 
 - **Selection Sort** encontra o mais urgente (mínimo) primeiro → salva mais aviões ✅
 - **Bubble Sort** empurra o menos urgente (máximo) pro final → deixa urgentes crasharem ❌
+- **Merge Sort** ordena em O(n log n), mas só libera pousos ao concluir — risco total durante a execução ⚠️
+- **Counting Sort** ordena em O(n+k) sem comparações, em 3 fases visíveis — zero crashes se concluir a tempo ✅
 
 ## Controles
 
@@ -18,9 +27,12 @@ Aviões se aproximam da pista de pouso (centro do radar). O sistema precisa orde
 |---|---|
 | `[1]` | Iniciar **Bubble Sort** |
 | `[2]` | Iniciar **Selection Sort** |
+| `[3]` | Iniciar **Merge Sort** |
+| `[4]` | Iniciar **Counting Sort** |
 | `[R]` | Resetar e embaralhar a frota |
 | `[SPACE]` | Pausar / Despausar simulação |
-| `[UP/DOWN]` | Ajustar velocidade da animação |
+| `[↑]` | Aumentar velocidade da animação |
+| `[↓]` | Diminuir velocidade da animação |
 
 A janela é redimensionável — o conteúdo escala proporcionalmente (16:9).
 

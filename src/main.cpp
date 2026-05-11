@@ -1,9 +1,8 @@
 // =============================================================================
-// PRIORITIZER ATC — Bubble Sort vs Selection Sort
-// Autor: patrickacs
+// PRIORITIZER ATC — Bubble | Selection | Merge | Counting Sort
+// Autor: patrickacs, Vinicius Castelo
 // Projeto EDA 2 — Estruturas de Dados e Algoritmos
 // Prioridade = distância. Mais perto = pousa primeiro.
-// Selection acha o mínimo rápido (salva). Bubble joga máximo pro fim (crash).
 // =============================================================================
 #include <patrickacs.h>
 #include <raymath.h>
@@ -14,6 +13,7 @@
 #include <ctime>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 const int SW=1280, SH=720;
 const float RCX=(SW-380)/2.0f, RCY=SH/2.0f, RR=310.0f, RP=22.0f;
@@ -28,7 +28,7 @@ Color CorDe(CorE e){
     }
 }
 
-// Explosão
+// Explosao
 struct Part{Vector2 p,v;float life;Color c;};
 struct Boom{float x,y,t;std::vector<Part>ps;};
 std::vector<Boom> booms;
@@ -67,13 +67,30 @@ struct Log{int id;char cs[7];bool ok;};
 std::vector<Voo> frota;
 std::vector<Log> logs;
 
-enum Modo{M_LIVRE,M_BUBBLE,M_SEL};
+enum Modo{M_LIVRE,M_BUBBLE,M_SEL,M_MERGE,M_COUNT};
 Modo modo=M_LIVRE;
-const char*nModo[]={"AGUARDANDO","BUBBLE SORT","SELECTION SORT"};
+const char*nModo[]={"AGUARDANDO","BUBBLE SORT","SELECTION SORT","MERGE SORT","COUNTING SORT"};
 float dAnim=0.08f;double tU=0;
 int nComp=0,nTroc=0;bool sDone=false;float tDec=0;
 bool pausado=true;
-int bI=0,bJ=0,sI=0,sMin=0,sJ=0;
+
+// Bubble Sort state
+int bI=0,bJ=0;
+
+// Selection Sort state
+int sI=0,sMin=0,sJ=0;
+
+// Merge Sort state (bottom-up iterativo)
+int mWidth=1,mLeft=0,mI=0,mJ=0,mK=0,mMid=0,mRight=0;
+bool mInMerge=false;
+std::vector<Voo> mTmp;
+
+// Counting Sort state
+const int CNT_MAX=320;
+int cntArr[CNT_MAX+1];
+Voo cntOutput[NV];
+int cPhase=0; // 0=contando  1=prefix sum  2=colocando
+int cIdx=0,cPrefixIdx=0;
 
 void Gerar(){
     frota.clear();logs.clear();booms.clear();
@@ -85,7 +102,7 @@ void Gerar(){
         v.ang=(rand()%3600)/10.0f*DEG2RAD;
         v.raio=80+(float)(rand()%(int)(RR-90));
         v.vel=3.0f+(rand()%8);
-        v.distInicial=v.raio; // CRITÉRIO: distância
+        v.distInicial=v.raio;
         v.est=C_N;v.chegou=false;v.ok=false;
         frota.push_back(v);
     }
@@ -94,15 +111,17 @@ void Gerar(){
 
 void RVis(){for(auto&v:frota)if(!v.chegou)v.est=C_N;}
 
-// Checa se idx está na região JÁ ORDENADA pelo algoritmo
 bool EstaOrdenado(int idx){
     if(sDone) return true;
-    if(modo==M_SEL) return idx<sI;    // Selection ordena do INÍCIO
-    if(modo==M_BUBBLE) return idx>=(NV-bI); // Bubble ordena do FIM
+    if(modo==M_SEL)    return idx<sI;
+    if(modo==M_BUBBLE) return idx>=(NV-bI);
+    // Merge e Counting so consideram seguro apos concluir (sDone)
     return false;
 }
 
-// --- Bubble Sort ---
+// =============================================================================
+// BUBBLE SORT
+// =============================================================================
 void InitBub(){RVis();modo=M_BUBBLE;bI=0;bJ=0;sDone=false;nComp=0;nTroc=0;tU=GetTime();}
 void StepBub(){
     if(sDone)return;if(GetTime()-tU<dAnim)return;tU=GetTime();
@@ -120,7 +139,9 @@ void StepBub(){
     }else{sDone=true;for(auto&v:frota)if(!v.chegou)v.est=C_OK;}
 }
 
-// --- Selection Sort ---
+// =============================================================================
+// SELECTION SORT
+// =============================================================================
 void InitSel(){RVis();modo=M_SEL;sI=0;sMin=0;sJ=1;sDone=false;nComp=0;nTroc=0;tU=GetTime();}
 void StepSel(){
     if(sDone)return;if(GetTime()-tU<dAnim)return;tU=GetTime();
@@ -141,7 +162,122 @@ void StepSel(){
     }else{sDone=true;for(auto&v:frota)if(!v.chegou)v.est=C_OK;}
 }
 
-// --- Radar ---
+// =============================================================================
+// MERGE SORT (bottom-up iterativo, um elemento por passo)
+// =============================================================================
+void InitMerge(){
+    RVis();modo=M_MERGE;sDone=false;nComp=0;nTroc=0;
+    mWidth=1;mLeft=0;mInMerge=false;
+    tU=GetTime();
+}
+
+void StepMerge(){
+    if(sDone)return;if(GetTime()-tU<dAnim)return;tU=GetTime();
+    RVis();
+
+    if(!mInMerge){
+        // Avanca mLeft ate achar par valido ou fim de passagem
+        while(mLeft<NV && mLeft+mWidth>=NV) mLeft+=2*mWidth;
+
+        if(mLeft>=NV){
+            mWidth*=2; mLeft=0;
+            if(mWidth>=NV){
+                sDone=true;
+                for(auto&v:frota)if(!v.chegou)v.est=C_OK;
+                return;
+            }
+            while(mLeft<NV && mLeft+mWidth>=NV) mLeft+=2*mWidth;
+            if(mLeft>=NV) return;
+        }
+
+        mMid  =mLeft+mWidth;
+        mRight=std::min(mLeft+2*mWidth,NV);
+        mTmp.assign(frota.begin()+mLeft,frota.begin()+mRight);
+        mI=0; mJ=mWidth; mK=mLeft;
+        mInMerge=true;
+    }
+
+    // Destaca janela atual
+    for(int k=mLeft;k<mRight;k++)if(!frota[k].chegou)frota[k].est=C_CMP;
+
+    int leftEnd =(int)mTmp.size()<mWidth?(int)mTmp.size():mWidth;
+    int rightEnd=(int)mTmp.size();
+
+    if(mI<leftEnd && mJ<rightEnd){
+        nComp++;
+        if(mTmp[mI].distInicial<=mTmp[mJ].distInicial){
+            frota[mK]=mTmp[mI];frota[mK].est=C_PIV;mI++;
+        }else{
+            frota[mK]=mTmp[mJ];frota[mK].est=C_PIV;mJ++;nTroc++;
+        }
+        mK++;
+    }else if(mI<leftEnd){
+        frota[mK]=mTmp[mI];frota[mK].est=C_OK;mI++;mK++;
+    }else if(mJ<rightEnd){
+        frota[mK]=mTmp[mJ];frota[mK].est=C_OK;mJ++;mK++;
+    }else{
+        mInMerge=false;
+        mLeft+=2*mWidth;
+    }
+}
+
+// =============================================================================
+// COUNTING SORT (passo a passo em 3 fases)
+// =============================================================================
+void InitCount(){
+    RVis();modo=M_COUNT;sDone=false;nComp=0;nTroc=0;
+    memset(cntArr,0,sizeof(cntArr));
+    cPhase=0;cIdx=0;cPrefixIdx=1;
+    tU=GetTime();
+}
+
+void StepCount(){
+    if(sDone)return;if(GetTime()-tU<dAnim)return;tU=GetTime();
+    RVis();
+
+    if(cPhase==0){
+        // Fase 1: conta ocorrencias
+        if(cIdx<NV){
+            int val=(int)frota[cIdx].distInicial;
+            if(val>CNT_MAX)val=CNT_MAX;
+            cntArr[val]++;
+            if(!frota[cIdx].chegou)frota[cIdx].est=C_CMP;
+            nComp++;
+            cIdx++;
+        }else{
+            for(int i=0;i<NV;i++)cntOutput[i]=frota[i];
+            cPhase=1;cPrefixIdx=1;
+        }
+    }else if(cPhase==1){
+        // Fase 2: prefix sum
+        if(cPrefixIdx<=CNT_MAX){
+            cntArr[cPrefixIdx]+=cntArr[cPrefixIdx-1];
+            cPrefixIdx++;
+        }else{
+            cPhase=2;cIdx=NV-1;
+        }
+    }else if(cPhase==2){
+        // Fase 3: posiciona cada elemento
+        if(cIdx>=0){
+            int val=(int)cntOutput[cIdx].distInicial;
+            if(val>CNT_MAX)val=CNT_MAX;
+            int pos=--cntArr[val];
+            if(pos>=0&&pos<NV){
+                frota[pos]=cntOutput[cIdx];
+                if(!frota[pos].chegou)frota[pos].est=C_PIV;
+                nTroc++;
+            }
+            cIdx--;
+        }else{
+            sDone=true;
+            for(auto&v:frota)if(!v.chegou)v.est=C_OK;
+        }
+    }
+}
+
+// =============================================================================
+// RADAR
+// =============================================================================
 void DrRadar(){
     DrawCircleGradient((int)RCX,(int)RCY,RR,{0,20,30,255},{5,5,10,0});
     for(int i=1;i<=4;i++)DrawCircleLines((int)RCX,(int)RCY,RR*i/4.0f,{0,150,200,35});
@@ -155,7 +291,9 @@ void DrRadar(){
     DrawText("PISTA",(int)RCX-14,(int)RCY+8,8,{0,255,150,100});
 }
 
-// --- Update aviões ---
+// =============================================================================
+// UPDATE / DRAW AVIOES
+// =============================================================================
 void UpdAv(float dt){
     for(int i=0;i<(int)frota.size();i++){
         Voo&v=frota[i];if(v.chegou)continue;
@@ -163,7 +301,7 @@ void UpdAv(float dt){
         v.ang+=.003f*dt*60;
         if(v.raio<=RP){
             v.raio=RP;v.chegou=true;
-            float px=RCX+cosf(v.ang)*v.raio, py=RCY+sinf(v.ang)*v.raio;
+            float px=RCX+cosf(v.ang)*v.raio,py=RCY+sinf(v.ang)*v.raio;
             bool safe=EstaOrdenado(i);
             v.ok=safe;v.est=safe?C_LAND:C_CRASH;
             Log l;l.id=v.id;strncpy(l.cs,v.cs,7);l.ok=safe;
@@ -173,19 +311,15 @@ void UpdAv(float dt){
     }
 }
 
-// --- Draw aviões ---
 void DrAv(){
     for(auto&v:frota){
-        float px=RCX+cosf(v.ang)*v.raio, py=RCY+sinf(v.ang)*v.raio;
+        float px=RCX+cosf(v.ang)*v.raio,py=RCY+sinf(v.ang)*v.raio;
         if(v.chegou&&v.est==C_CRASH)continue;
         Color c=CorDe(v.est);
         if(v.chegou&&v.est==C_LAND){DrawCircle((int)px,(int)py,3,Fade(c,.4f));continue;}
-        // Linha sutil do avião até a pista (centro)
         DrawLineEx({px,py},{RCX,RCY},1.0f,Fade(c,0.08f));
-        // Distância no ponto médio da linha
-        float mx=(px+RCX)/2, my=(py+RCY)/2;
+        float mx=(px+RCX)/2,my=(py+RCY)/2;
         DrawText(TextFormat("%.0f",v.raio),(int)mx-8,(int)my-4,8,Fade(c,0.25f));
-        // Blip
         DrawCircleGradient((int)px,(int)py,14,Fade(c,.35f),Fade(c,0));
         DrawCircle((int)px,(int)py,3,WHITE);DrawCircle((int)px,(int)py,2,c);
         if(v.est==C_CMP||v.est==C_PIV||v.est==C_OK){
@@ -194,7 +328,9 @@ void DrAv(){
     }
 }
 
-// --- Dashboard ---
+// =============================================================================
+// DASHBOARD
+// =============================================================================
 void DrDash(){
     int dx=SW-380,w=380;
     DrawRectangle(dx,0,w,SH,{10,14,20,245});
@@ -209,7 +345,7 @@ void DrDash(){
     DrawText(TextFormat("DELAY: %.3fs | COMP: %d | TROCAS: %d",dAnim,nComp,nTroc),dx+20,sy+14,9,LIGHTGRAY);
     DrawText(TextFormat("TEMPO: %.1fs",tDec),dx+20,sy+28,9,{180,180,180,255});
 
-    // Explicação do algoritmo
+    // Explicacao do algoritmo
     int ey=sy+46;
     if(modo==M_BUBBLE){
         DrawText("BUBBLE: Empurra o MAIOR pro final.",dx+20,ey,9,{255,200,0,200});
@@ -217,10 +353,19 @@ void DrDash(){
     }else if(modo==M_SEL){
         DrawText("SELECTION: Acha o MENOR primeiro.",dx+20,ey,9,{255,200,0,200});
         DrawText("O mais perto eh priorizado rapido -> POUSO!",dx+20,ey+12,9,{40,255,120,180});
+    }else if(modo==M_MERGE){
+        DrawText("MERGE: Divide e mescla sublistas ordenadas.",dx+20,ey,9,{255,200,0,200});
+        DrawText("O(n log n) — ordena em bloco, sem pouso parcial.",dx+20,ey+12,9,{100,180,255,180});
+        DrawText(TextFormat("Bloco: %d  |  Inicio: %d",mWidth,mLeft),dx+20,ey+24,9,{100,180,255,140});
+    }else if(modo==M_COUNT){
+        const char*fases[3]={"Fase 1/3: Contando distancias...","Fase 2/3: Acumulando contagens...","Fase 3/3: Posicionando avioes..."};
+        DrawText("COUNTING: Ordena por contagem direta.",dx+20,ey,9,{255,200,0,200});
+        DrawText(fases[cPhase<3?cPhase:2],dx+20,ey+12,9,{180,100,255,200});
+        DrawText("O(n+k) — zero comparacoes!",dx+20,ey+24,9,{180,100,255,140});
     }
 
     // Legenda
-    int ly=ey+30;
+    int ly=ey+38;
     DrawCircle(dx+25,ly,4,CorDe(C_N));DrawText("Neutro",dx+35,ly-5,9,LIGHTGRAY);
     DrawCircle(dx+105,ly,4,CorDe(C_CMP));DrawText("Comparando",dx+115,ly-5,9,LIGHTGRAY);
     DrawCircle(dx+210,ly,4,CorDe(C_PIV));DrawText("Candidato",dx+220,ly-5,9,LIGHTGRAY);
@@ -261,45 +406,55 @@ void DrDash(){
     // Controles
     int cy=SH-55;
     DrawLine(dx+15,cy-8,dx+w-15,cy-8,{255,255,255,15});
-    DrawText("[1] Bubble Sort  [2] Selection Sort  [R] Reset  [UP/DOWN] Vel.  [SPACE] Pausar",
-        dx+20,cy,9,{100,100,100,200});
+    DrawText("[1] Bubble  [2] Selection  [3] Merge  [4] Counting",dx+20,cy,9,{100,100,100,200});
+    DrawText("[R] Reset   [UP/DOWN] Velocidade   [SPACE] Pausar",dx+20,cy+12,9,{100,100,100,200});
 }
 
+// =============================================================================
+// MAIN
+// =============================================================================
 int main(){
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(SW,SH,"Prioritizer ATC - Bubble Sort vs Selection Sort");
-    SetWindowMinSize(640, 360);
-    SetTargetFPS(60);Gerar();
+    InitWindow(SW,SH,"Prioritizer ATC - Bubble | Selection | Merge | Counting Sort");
+    SetWindowMinSize(640,360);
+    SetTargetFPS(60);
+    Gerar();
 
-    // RenderTexture para manter layout fixo e escalar proporcionalmente
-    RenderTexture2D canvas = LoadRenderTexture(SW, SH);
-    SetTextureFilter(canvas.texture, TEXTURE_FILTER_BILINEAR);
+    // Canvas fixo 1280x720 — escala proporcionalmente com a janela
+    RenderTexture2D canvas=LoadRenderTexture(SW,SH);
+    SetTextureFilter(canvas.texture,TEXTURE_FILTER_BILINEAR);
 
     while(!WindowShouldClose()){
         float dt=GetFrameTime();if(!pausado)tDec+=dt;
-        if(IsKeyPressed(KEY_R))Gerar();
-        if(IsKeyPressed(KEY_ONE)&&modo==M_LIVRE)InitBub();
-        if(IsKeyPressed(KEY_TWO)&&modo==M_LIVRE)InitSel();
-        if(IsKeyPressed(KEY_UP)){dAnim-=.02f;if(dAnim<.01f)dAnim=.01f;}
+
+        if(IsKeyPressed(KEY_R))    Gerar();
+        if(IsKeyPressed(KEY_ONE)  &&modo==M_LIVRE)InitBub();
+        if(IsKeyPressed(KEY_TWO)  &&modo==M_LIVRE)InitSel();
+        if(IsKeyPressed(KEY_THREE)&&modo==M_LIVRE)InitMerge();
+        if(IsKeyPressed(KEY_FOUR) &&modo==M_LIVRE)InitCount();
+        if(IsKeyPressed(KEY_UP))  {dAnim-=.02f;if(dAnim<.01f)dAnim=.01f;}
         if(IsKeyPressed(KEY_DOWN)){dAnim+=.02f;if(dAnim>1)dAnim=1;}
         if(IsKeyPressed(KEY_SPACE))pausado=!pausado;
+
         if(!pausado){
             if(modo==M_BUBBLE)StepBub();
-            if(modo==M_SEL)StepSel();
+            if(modo==M_SEL)   StepSel();
+            if(modo==M_MERGE) StepMerge();
+            if(modo==M_COUNT) StepCount();
             UpdAv(dt);UpdBoom(dt);
         }
 
-        // Renderiza cena no canvas fixo (1280x720)
+        // Renderiza no canvas fixo
         BeginTextureMode(canvas);
             ClearBackground({5,5,8,255});
             DrRadar();DrAv();DrBoom();DrDash();
         EndTextureMode();
 
-        // Escala canvas para preencher a janela mantendo proporção 16:9
-        int ww=GetScreenWidth(), wh=GetScreenHeight();
+        // Escala canvas para a janela mantendo proporcao 16:9
+        int ww=GetScreenWidth(),wh=GetScreenHeight();
         float scale=fminf((float)ww/SW,(float)wh/SH);
-        float dw=SW*scale, dh=SH*scale;
-        float ox=(ww-dw)/2.0f, oy=(wh-dh)/2.0f;
+        float dw=SW*scale,dh=SH*scale;
+        float ox=(ww-dw)/2.0f,oy=(wh-dh)/2.0f;
         Rectangle src={0,0,(float)SW,-(float)SH};
         Rectangle dst={ox,oy,dw,dh};
 
@@ -308,6 +463,8 @@ int main(){
             DrawTexturePro(canvas.texture,src,dst,{0,0},0,WHITE);
         EndDrawing();
     }
+
     UnloadRenderTexture(canvas);
-    CloseWindow();return 0;
+    CloseWindow();
+    return 0;
 }
