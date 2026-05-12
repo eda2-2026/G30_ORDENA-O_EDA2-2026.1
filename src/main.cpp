@@ -458,15 +458,31 @@ void RunBenchmark() {
 void Gerar() {
     frota.clear(); logs.clear(); booms.clear();
     srand((unsigned)time(0));
-    const char* pf[] = {"AZU","GOL","TAM","LAT","VRG","PTB"};  // prefixos de companhias
+    const char* pf[] = {"AZU","GOL","TAM","LAT","VRG","PTB"};
+    const float MIN_DIST = 30.0f;  // distancia minima entre avioes no radar (pixels)
     for (int i = 0; i < NV; i++) {
         Voo v;
         v.id = 100 + rand() % 900;
         snprintf(v.cs, 7, "%s%02d", pf[rand()%6], v.id % 100);
-        v.ang = (rand() % 3600) / 10.0f * DEG2RAD;
-        v.raio = 80 + (float)(rand() % (int)(RR - 90));
+        // Gera posicao garantindo distancia minima dos avioes ja criados
+        int tentativas = 0;
+        bool valido;
+        do {
+            v.ang = (rand() % 3600) / 10.0f * DEG2RAD;
+            v.raio = 80 + (float)(rand() % (int)(RR - 90));
+            valido = true;
+            float px = RCX + cosf(v.ang) * v.raio;
+            float py = RCY + sinf(v.ang) * v.raio;
+            for (auto& outro : frota) {
+                float ox = RCX + cosf(outro.ang) * outro.raio;
+                float oy = RCY + sinf(outro.ang) * outro.raio;
+                float dx = px - ox, dy = py - oy;
+                if (dx*dx + dy*dy < MIN_DIST * MIN_DIST) { valido = false; break; }
+            }
+            tentativas++;
+        } while (!valido && tentativas < 200);
         v.vel = 3.0f + (rand() % 8);
-        v.distInicial = v.raio;    // criterio de ordenacao: distancia inicial
+        v.distInicial = v.raio;
         v.est = C_N; v.chegou = false; v.ok = false;
         frota.push_back(v);
     }
@@ -796,9 +812,9 @@ void StepCount() {
             cPhase = 1; cPrefixIdx = 1;
         }
     } else if (cPhase == 1) {
-        // Fase 2: prefix sum (soma acumulativa)
-        if (cPrefixIdx <= CNT_MAX) { cntArr[cPrefixIdx] += cntArr[cPrefixIdx-1]; cPrefixIdx++; }
-        else { cPhase = 2; cIdx = NV-1; }
+        // Fase 2: prefix sum (soma acumulativa) — roda inteiro de uma vez (nada visual pra animar)
+        for (int i = 1; i <= CNT_MAX; i++) cntArr[i] += cntArr[i-1];
+        cPhase = 2; cIdx = NV-1;
     } else if (cPhase == 2) {
         // Fase 3: posicionamento final (de tras pra frente = estavel)
         if (cIdx >= 0) {
@@ -1025,7 +1041,9 @@ void UpdAv(float dt) {
             if (!safe) MkBoom(px, py);  // explosao visual no crash
         }
     }
-    // Deteccao de colisao entre avioes (distancia euclidiana < 10px)
+    // Deteccao de colisao entre avioes — so quando nenhum algoritmo esta rodando
+    // Durante a ordenacao, colisoes interferem na demonstracao
+    if (modo != M_LIVRE) return;
     for (int i = 0; i < (int)frota.size(); i++) {
         if (frota[i].chegou) continue;
         float px1 = RCX + cosf(frota[i].ang)*frota[i].raio;
