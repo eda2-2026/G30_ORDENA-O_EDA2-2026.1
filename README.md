@@ -12,6 +12,14 @@ Simulador de Radar de Controle de Trafego Aereo (ATC) focado na demonstracao vis
 | Patrick Anderson Carvalho dos Santos | 211030620 |
 | Vinicius Castelo Ferreira | 200062883 |
 
+
+
+## Apresentação
+
+[Segunda Apresentação](https://www.youtube.com/watch?v=cNUD3PQa5ts)
+
+
+
 ## Conceito
 
 Avioes se aproximam da pista de pouso (centro do radar). O sistema precisa ordenar a fila de pouso por **distancia** — quem esta mais perto pousa primeiro. Se o algoritmo nao conseguir ordenar a tempo, o aviao chega sem priorizacao e **crasha**.
